@@ -1,0 +1,349 @@
+import pandas as pd
+import numpy as np
+from matplotlib import pyplot as plt
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
+from sklearn.metrics import confusion_matrix
+from seaborn import heatmap
+import seaborn as sbn
+from sklearn.metrics import balanced_accuracy_score
+from sklearn.metrics import f1_score
+from sklearn.metrics import recall_score
+from sklearn.metrics import precision_score
+from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_curve
+from sklearn.metrics import auc
+
+
+df = pd.read_excel('Qbot_6.xlsx')
+df.head()
+df = df.drop(['bumpc', 'bumpr', 'ang_accdelay', 'lwheel_acc1'], axis=1)
+df.info()
+df.isnull().sum()
+#Frequence of the classes
+freq = df['bumpl_norm'].value_counts()
+freq
+#Correlation between the features and the target
+s = abs(df.corr()['bumpl_norm']).sort_values(ascending=False)
+s = s.drop(['bumpl_norm'])
+s
+#Barplot of the importance of the features
+pd.DataFrame(s.values, index=s.index , columns = ['Importance'])
+1
+s.head(12).plot(kind = 'bar')
+
+#Get some insight for the most relevant feature
+plt.scatter(df['gyro'], df['bumpl_norm'], c='#d62728')
+plt.xlabel('gyro')
+plt.ylabel('bumpl_norm')
+
+#Dataframe only for active bumper
+dff = df[df['bumpl_norm']==1]
+#Dataframe only for non active bumper
+dfg = df[df['bumpl_norm']==0]
+#Some visual insight from the 2 most importance features
+fig, (ax1, ax2) = plt.subplots(1, 2)
+ax1.scatter(dff['lwheel_acc'], dff['bumpl_norm'])
+ax1.scatter(dfg['lwheel_acc'], dfg['bumpl_norm'], c='red')
+ax2.scatter(dff['gyro'], dff['bumpl_norm'])
+ax2.scatter(dfg['gyro'], dfg['bumpl_norm'], c='green')
+0.1 ML Models
+[ ]: #Define the features and the target
+y = df['bumpl_norm']
+X = df.drop(['bumpl_norm'], axis=1)
+y.head()
+[ ]: # Split data into training and test set
+from sklearn.model_selection import train_test_split
+Xtrain, Xtest, ytrain, ytest = train_test_split(X, y, test_size = 0.3)
+[ ]: model = LogisticRegression()
+[ ]: model = model.fit(Xtrain, ytrain)
+[ ]: print(model.coef_) #coeff of our regression model
+print(model.intercept_) #intercept
+[ ]: #Make predictions based on training set
+ytrain_pred = model.predict(Xtrain)
+[ ]: #Accuracy and confusion matrix based on training set
+model.score(Xtrain, ytrain) #(in % of cases our model works correct)
+2
+[ ]: #Confusion matrix
+cm_train = confusion_matrix(ytrain, ytrain_pred)
+cm_train
+[ ]: plt.figure(figsize=(7,5))
+heatmap(cm_train/sum(sum(cm_train)), annot=True, fmt = '.2%', cmap='Blues')
+plt.xlabel('Predicted')
+plt.ylabel('Actual')
+[ ]: ytest_pred = model.predict(Xtest)
+[ ]: # Plot of observations and predictions based on test data
+plt.scatter(Xtest['gyro'][0:200], ytest[0:200], c='gold') #xtrain e ytrain␣
+↪must be the same size
+plt.scatter(Xtest['gyro'][0:200], ytest_pred[0:200], marker = 'x', c='black') ␣
+↪#overlapping when the y_pred is right
+[ ]: model.score(Xtest, ytest)
+[ ]:
+0.2 Decision tree
+[ ]: # Decision tree
+from sklearn.tree import DecisionTreeClassifier
+model = DecisionTreeClassifier()
+[ ]: model.get_params()
+[ ]: #Define the features and the target
+y = df['bumpl_norm']
+X = df.drop(['bumpl_norm'], axis=1)
+[ ]: #Split
+Xtrain, Xtest, ytrain, ytest = train_test_split(X, y, test_size = 0.3,␣
+↪shuffle=False)
+[ ]: model = model.fit(Xtrain, ytrain)
+[ ]: # Accuracy of the model on traing set
+model.score(Xtrain, ytrain) #IT?S HIGH, expected it
+[ ]: model.score(Xtest, ytest)
+[ ]: model.feature_importances_ #-->how features affect our dependent variable
+[ ]: ytest_pred = model.predict(Xtest)
+3
+[ ]: cm = confusion_matrix(ytest, ytest_pred)
+plt.figure(figsize = (6,6))
+heatmap(cm/sum(sum(cm)), annot = True, fmt = '.2%', cmap = 'Blues')
+plt.xlabel('Actual')
+plt.ylabel('Predicted')
+plt.show()
+[ ]: #Accuracy for imbalanced class
+balanced_accuracy_score(ytest, ytest_pred)
+[ ]: feature_names = ['ang_acc', 'gyro', 'lv_actual', 'lv_comm', 'lwheel',␣
+↪'lwheel_acc', 'rv_actual', 'rv_comm', 'rwheel']
+[ ]: df.shape
+df.head()
+[ ]: #Create a dataframe
+#feature_importances = pd.DataFrame(model.feature_importances_, index =␣
+↪feature_names, columns = ['Importance'])
+#feature_importances = pd.DataFrame(model.feature_importances_, index =␣
+↪feature_names_2, columns = ['Importance'])
+feature_importances = pd.DataFrame(model.feature_importances_, index =␣
+↪feature_names, columns = ['Importance'])
+[ ]: feature_importances
+[ ]: feature_importances.head(18).plot(kind = 'bar')
+[ ]: #See how can DecisionTree make the classification (albero)
+from sklearn.tree import plot_tree
+fig = plt.figure(figsize=(36,20))
+plot_tree(model,
+feature_names = feature_names,
+class_names = {0: 'Ok', 1: 'Obstacle'},
+filled = True,
+fontsize = 10)
+plt.show()
+[ ]: #Now we want to prune the tree
+model = DecisionTreeClassifier()
+model.get_params() #look paramaters again
+[ ]: #Change alpha parameter
+model.ccp_alpha = 0.003
+4
+model.fit(Xtrain, ytrain)
+fig = plt.figure(figsize=(18,15))
+plot_tree(model,
+feature_names = feature_names,
+class_names = {0: 'Ok', 1: 'Obstacle'},
+filled = True,
+fontsize = 10)
+plt.show()
+#if alpha is high-->less nodes I will have
+#figure based on the fitting on the train
+[ ]: #Find the best alpha
+path = model.cost_complexity_pruning_path(Xtrain, ytrain)
+ccp_alphas, impurities = path.ccp_alphas, path.impurities
+#variables that contains all alpha and 'impurities' when the decision tree is␣
+↪generated
+[ ]: print('Lista alpha: ',ccp_alphas) #list of alpha values
+print('Lista impurities: ',impurities)
+#Create a plot
+fig, ax = plt.subplots()
+ax.plot(ccp_alphas[:-1], impurities[:-1], marker="o", drawstyle="steps-post")
+ax.set_xlabel("effective alpha")
+ax.set_ylabel("total impurity of leaves")
+ax.set_title("Total Impurity vs effective alpha for training set")
+[ ]: #Now we will create a decision tree for each of the alpha-values
+model_list = []
+for i in ccp_alphas:
+model = DecisionTreeClassifier(ccp_alpha = i)
+model.fit(Xtrain, ytrain)
+model_list.append(model)
+print(model_list)
+[ ]: # Plot the SCORE of the model, dependent on alpha
+train_scores = [model.score(Xtrain, ytrain) for model in model_list]
+test_scores = [model.score(Xtest, ytest) for model in model_list]
+[ ]: #scores ON TRAINING SET for different models with different alphas
+plt.plot(ccp_alphas, train_scores, marker = 'o', label = 'train', color ='blue')
+5
+plt.plot(ccp_alphas, test_scores, marker = 'o', label = 'test', color ='green')
+plt.legend()
+#THE SCORES GO DOWN AFTER I PRUNE THE TREE
+#to find the best balance, see which is the best alpha to prune the tree, (dove␣
+↪circa coincidono)
+#Not so reliable because we have used 1 particular TRAIN and 1 TEST SET
+[ ]: #Try with cross score validation
+from sklearn.model_selection import cross_val_score
+[ ]: model = DecisionTreeClassifier()
+scores_train = cross_val_score(model, Xtrain, ytrain, cv = 4)
+#scores_test = cross_val_score(model, Xtest, ytest, cv = 4)
+print(scores_train) #of different training set
+[ ]: #Create a DataFrame which cointains for each alpha the SCORE and STD DEVIATION
+alpha_loop_values = []
+for i in ccp_alphas:
+model = DecisionTreeClassifier(ccp_alpha = i, random_state = 0)
+scores = cross_val_score(model, Xtrain, ytrain, cv = 5)
+alpha_loop_values.append([i, np.mean(scores), np.std(scores)])
+#alpha_loop_values
+[ ]: # Put this into a dataframe
+alpha_results = pd.DataFrame(alpha_loop_values, columns = ['Alpha',␣
+↪'Mean_Accuracy', 'StDev_Accuracy'])
+alpha_results.head()
+[ ]: #Create a plot
+alpha_results.plot(x = 'Alpha',
+y = 'Mean_Accuracy',
+marker = 'o',
+linestyle = '--',
+yerr = 'StDev_Accuracy')
+[ ]: # Ideal alpha
+#find the MAX value in the 'Mean_Accuracy' of 'Alpha' column (in alpha_results)
+6
+ideal_alpha = alpha_results[ alpha_results.Mean_Accuracy == max(alpha_results.
+↪Mean_Accuracy) ].Alpha
+ideal_alpha
+[ ]: type(ideal_alpha) #Series, I want a float
+ideal_alpha = float(ideal_alpha)
+ideal_alpha
+0.3 Pruning
+[ ]: # Now we will build the pruned decision tree
+model_pruned = DecisionTreeClassifier(ccp_alpha = ideal_alpha)
+# Fit the model
+model_pruned = model_pruned.fit(Xtrain, ytrain)
+# Predictions
+y_pred = model_pruned.predict(Xtest)
+[ ]: # Confusion Matrix
+cm = confusion_matrix(ytest, y_pred)
+plt.figure(figsize = (6,6))
+plt.xlabel
+heatmap(cm/sum(sum(cm)), annot = True, fmt = '.2%', cmap = 'Blues')
+plt.xlabel('Actual')
+plt.ylabel('Predicted')
+plt.show()
+[ ]: # Draw final tree
+fig = plt.figure(figsize=(25,15))
+plot_tree(model_pruned,
+feature_names = feature_names,
+class_names = {0: 'Ok', 1: 'Obstacle'},
+filled = True,
+fontsize = 10)
+plt.show()
+[ ]:
+7
+0.4 SVM
+[ ]: df = pd.read_excel('Qbot_6.xlsx')
+df.head()
+[ ]: df = df.drop(['bumpc', 'bumpr', 'ang_accdelay', 'lwheel_acc1'], axis=1)
+[ ]: X = df.drop(['bumpl_norm'], axis=1)
+y = df['bumpl_norm']
+[ ]: Xtrain, Xtest, ytrain, ytest = train_test_split(X, y, test_size = 0.3)
+Xtrain.tail()
+[ ]: #Scaling the features
+scaler = MinMaxScaler().fit(Xtrain)
+Xtrain = scaler.transform(Xtrain) #need to transform it in a df
+pd.DataFrame(Xtrain, columns = ['ang_acc', 'gyro', 'lv_actual', 'lv_comm',␣
+↪'lwheel', 'lwheel_acc', 'rv_actual', 'rv_comm', 'rwheel'])
+[ ]: from sklearn.svm import SVC
+model = SVC(gamma = 'auto')
+model.fit(Xtrain, ytrain)
+[ ]: model.get_params()
+[ ]: model.score(Xtrain, ytrain) #score for training set
+[ ]: model.score(Xtest, ytest) #score for test set
+[ ]: y_pred = model.predict(Xtest)
+[ ]: cm = confusion_matrix(y_pred, ytest)
+cm
+#Metrics for imbalanced class
+print('Recall: ', recall_score(ytest, y_pred, average='binary')) #recall␣
+↪(result for the class for the positive label --> TP/TP+FN )
+print('Precision: ', precision_score(ytest, y_pred, average='binary'))
+print('F1: ', f1_score(ytest, y_pred, average='binary')) #harmonic mean of the␣
+↪precision and recall
+print('Balanced accuracy: ', balanced_accuracy_score(ytest, y_pred)) #average␣
+↪of recall obtained by each class
+y_predprob = model.decision_function(Xtest)
+print('ROC score: ', roc_auc_score(ytest, y_predprob)) #ROC score
+#Plot ROC curve
+fpr, tpr, _ = roc_curve(ytest, y_predprob)
+8
+plt.plot(fpr,tpr)
+plt.ylabel('True Positive Rate')
+plt.xlabel('False Positive Rate')
+plt.show()
+[ ]: auc(fpr, tpr) #area under the curve
+[ ]: cm = confusion_matrix(y_pred, ytest)
+plt.figure(figsize = (6,6))
+plt.xlabel
+heatmap(cm/sum(sum(cm)), annot = True, fmt = '.2%', cmap = 'Blues')
+plt.xlabel('Actual')
+plt.ylabel('Predicted')
+plt.show()
+0.5 Same model but with undersampling
+[ ]: #from imblearn.under_sampling import NearMiss
+#nm = NearMiss()
+[ ]: X = df.drop(['bumpl_norm'], axis=1)
+y = df['bumpl_norm']
+[ ]: #Scaling the features
+scaler = MinMaxScaler().fit(X)
+Xtrain = scaler.transform(X) #need to transform it in a df
+df_scaled = pd.DataFrame(X, columns = ['ang_acc', 'gyro', 'lv_actual',␣
+↪'lv_comm', 'lwheel', 'lwheel_acc', 'rv_actual', 'rv_comm', 'rwheel'])
+df_scaled.tail() #the features are scaled now
+#add the target columns
+df_scaled['bumpl_norm'] = df['bumpl_norm'].values
+df_scaled.tail()
+Undersampling
+[ ]: minclass_len = len(df[df['bumpl_norm']==1])
+minclass_len #len of the df when the Target==1
+[ ]: majclass_ind = df[df['bumpl_norm']==0].index
+majclass_ind #index of the df whe the Target=0
+[ ]: majclass_rand = np.random.choice(majclass_ind, minclass_len, replace=False)␣
+↪#choose randomly
+len(majclass_rand) #same as minclass_len
+9
+[ ]: minclass_ind = df[df['bumpl_norm']==1].index
+indices = np.concatenate([minclass_ind, majclass_rand]) #indices of␣
+↪undersample dataset
+[ ]: undersample = df_scaled.loc[indices]
+undersample #DATASET
+[ ]: sbn.countplot('bumpl_norm', data=undersample) #now the dataset is balanced
+[ ]: #Model
+y = undersample['bumpl_norm']
+X = undersample.drop(['bumpl_norm'], axis=1)
+[ ]: #X_new, y_new = nm.fit_resample(X, y)
+#print(Xtrain_new.shape, y_new.shape)
+[ ]: Xtrain, Xtest, ytrain, ytest = train_test_split(X, y, test_size = 0.3)
+[ ]: model.fit(Xtrain, ytrain)
+[ ]: model.score(Xtrain, ytrain)
+[ ]: model.score(Xtest, ytest)
+[ ]: y_pred = model.predict(Xtest)
+[ ]: cm = confusion_matrix(y_pred, ytest)
+cm
+#Metrics for balanced class
+print('Recall: ', recall_score(ytest, y_pred, average='binary')) #recall␣
+↪(result for the class for the positive label --> TP/TP+FN )
+print('Precision: ', precision_score(ytest, y_pred, average='binary'))
+print('F1: ', f1_score(ytest, y_pred, average='binary')) #harmonic mean of the␣
+↪precision and recall
+print('Balanced accuracy: ', balanced_accuracy_score(ytest, y_pred)) #average␣
+↪of recall obtained by each class
+y_predprob = model.decision_function(Xtest)
+print('ROC score: ', roc_auc_score(ytest, y_predprob)) #ROC score
+#Plot ROC curve
+fpr, tpr, _ = roc_curve(ytest, y_predprob)
+plt.plot(fpr,tpr)
+plt.ylabel('True Positive Rate')
+plt.xlabel('False Positive Rate')
+plt.show()
+10
+[ ]: auc(fpr, tpr) #area under the curve
+[ ]: y_pred.sum() # qui non predice (quasi) sempre 0, anzi
+[ ]: cm = confusion_matrix(y_pred, ytest)
+plt.figure(figsize = (6,6))
+plt.xlabel
+heatmap(cm/sum(sum(cm)), annot = True, fmt = '.2%', cmap = 'Blues')
+plt.xlabel('Actual')
+plt.ylabel('Predicted')
+plt.show()
