@@ -1,0 +1,224 @@
+import pandas as pd
+import numpy as np
+from matplotlib import pyplot as plt
+
+from sklearn.linear_model import LogisticRegression
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.svm import SVC
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
+from sklearn.metrics import confusion_matrix
+from seaborn import heatmap
+import seaborn as sbn
+
+from sklearn.metrics import balanced_accuracy_score
+from sklearn.metrics import f1_score
+from sklearn.metrics import recall_score
+from sklearn.metrics import precision_score
+from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_curve
+from sklearn.metrics import auc
+
+
+df = pd.read_excel('Qbot_5min.xlsx')
+df = df.drop(['bumpc', 'bumpr'], axis=1)
+df.isnull().sum()
+df.head()
+
+#Frequence of the classes
+freq = df['bumpl_norm'].value_counts()
+freq
+
+#Correlation between the features and the target
+s = abs(df.corr(method='spearman')['bumpl_norm']).sort_values(ascending=False)
+s = s.drop(['bumpl_norm'])
+s
+
+corr_df = pd.DataFrame(s.values, index=s.index , columns = ['Importance'])
+corr_df
+
+s.head(12).plot(kind = 'bar')
+
+
+##UNDERSAMPLING 
+minclass_len = len(df[df['bumpl_norm']==1]) 
+minclass_len  #len of the df when the Target==1
+
+majclass_ind = df[df['bumpl_norm']==0].index
+majclass_ind #index of the df whe  the Target=0
+
+majclass_rand = np.random.choice(majclass_ind, minclass_len, replace=False) #choose randomly
+len(majclass_rand) #same as minclass_len
+
+minclass_ind = df[df['bumpl_norm']==1].index
+indices = np.concatenate([minclass_ind, majclass_rand])  #indices of undersample dataset
+
+undersample = df.loc[indices]
+df = undersample #DATASET
+sbn.countplot('bumpl_norm', data=df) #now the dataset is balanced
+
+
+##MODELS
+#Loading the df, without undersampling
+df = pd.read_excel('Qbot_5min.xlsx')
+df = df.drop(['bumpc', 'bumpr'], axis=1)
+
+X = df.drop(['bumpl_norm'], axis=1)
+y = df['bumpl_norm']
+df.head()
+
+#WITHOUT UNDERSAMPLING
+from time import process_time
+tstart = process_time()
+
+n_feat = df.shape[1]-1 #total number of features
+
+model_L = LogisticRegression()
+model_DT = DecisionTreeClassifier()
+model_SVM = SVC(gamma = 'auto')
+
+
+#array that I need for the plot
+n_iter = []
+logistic_score = []
+decisiontree_score = []
+svm_score = []
+
+#The models will be evaluated from 1 to 'n_feat' numbers of features
+for i in range(0, n_feat):
+    X = df.iloc[:,:i+1] #inizializzo 'X', non ho bisogno di una matrice vuota da sommare
+    y = df['bumpl_norm']
+    
+    X = X.dropna(axis=1) 
+
+    Xtrain, Xtest, ytrain, ytest = train_test_split(X, y, test_size = 0.3, random_state=42)
+    #print(X)
+    
+    
+    #Scaling for SVM
+    scaler = MinMaxScaler().fit(X)
+    X_sc = scaler.transform(X) #need to transform it in a df
+    X_sc = pd.DataFrame(X_sc) #done
+    y_sc = df['bumpl_norm']
+    
+    #Splitting for scaled features
+    Xtrain_sc, Xtest_sc, ytrain, ytest = train_test_split(X_sc, y_sc, test_size = 0.3, random_state=42)
+
+    
+    #Models
+    model_L.fit(Xtrain, ytrain)
+    model_DT.fit(Xtrain, ytrain)
+    model_SVM.fit(Xtrain_sc, ytrain)
+    
+    
+    #print(Xtrain)
+    model_L.predict(Xtest)
+    model_DT.predict(Xtest)
+    model_SVM.predict(Xtest_sc)
+    
+    print('SCORE LOGISTIC REGRESSION: ', model_L.score(Xtest, ytest)) #accuracy of the model
+    logistic_score.append(model_L.score(Xtest, ytest))
+    print('SCORE DECISION TREE: ', model_DT.score(Xtest, ytest))
+    decisiontree_score.append(model_DT.score(Xtest, ytest))
+    print('SCORE SVM: ', model_SVM.score(Xtest_sc, ytest))
+    svm_score.append(model_SVM.score(Xtest_sc, ytest))
+    
+    print('Number of features: ', i)
+    n_iter.append(i)
+    
+tstop = process_time()
+
+print('Elapsed time: ', tstop-tstart, 'seconds')
+
+
+#Plotting the scores
+plt.plot(n_iter, logistic_score)
+plt.plot(n_iter, decisiontree_score)
+plt.plot(n_iter, svm_score)
+plt.legend(['logistic', 'decisiontree', 'svm'])
+plt.xlabel('Number of features')
+plt.ylabel('Accuracy')
+
+
+#MODEL THAT TAKE INTO ACCOUNT THE PREVIOUS FEATURE (t-i) FOR PREDICTING Yt
+
+#retrieve just the most relevant features for this model
+threshold = 0.2
+corr_df = corr_df[corr_df>=threshold] #take the most relevant features (>=0.2) for the model
+corr_df = corr_df.dropna() #because the values of the featrues < 0.2 become 'NaN'
+corr_dfnames = corr_df.index.values.tolist() #array with name of features as elements
+corr_dfnames
+
+
+#Model (Logistic Regression) based on the previous time 
+
+#Voglio vedere se funzionano meglio le feature al tempo t/t-1/t-2/t-3 ecc per predire yt
+#Dopo voglio mettere insieme le feature al tempo t con le feature al tempo t-i(per predire yt) 
+#(i lo trovo allo step precedente)
+
+
+#Create the features for t-1 and t-2
+df['ang_acc1'] = df.ang_acc.shift(periods=1)
+df['gyro1'] = df.gyro.shift(periods=1)
+df['lwheel1'] = df.lwheel.shift(periods=1)
+df['lwheel_acc1'] = df.lwheel_acc.shift(periods=1)
+df['rwheel1'] = df.rwheel.shift(periods=1)
+df['rwheel_acc1'] = df.rwheel_acc.shift(periods=1)
+
+df['ang_acc2'] = df.ang_acc.shift(periods=2)
+df['gyro2'] = df.gyro.shift(periods=2)
+df['lwheel2'] = df.lwheel.shift(periods=2)
+df['lwheel_acc2'] = df.lwheel_acc.shift(periods=2)
+df['rwheel2'] = df.rwheel.shift(periods=2)
+df['rwheel_acc2'] = df.rwheel_acc.shift(periods=2)
+
+df = df.dropna()
+
+
+
+
+#ANN (stesso dell'altro file, fin ora 15/04)
+from keras.models import Sequential
+from keras.optimizers import Adam
+from keras.metrics import Recall
+from keras.metrics import BinaryAccuracy
+from keras.layers import Dense
+from keras.callbacks import EarlyStopping
+
+df = pd.read_excel('Qbot_5min.xlsx')
+df = df.drop(['bumpc', 'bumpr'], axis=1)
+
+X = df.drop(['bumpl_norm'], axis=1)
+y = df['bumpl_norm']
+df.head()
+
+y = pd.get_dummies(y)
+#Splitting 
+Xtrain, Xtest, ytrain, ytest = train_test_split(X, y, test_size = 0.3, random_state=42)
+model = Sequential()
+model.add(Dense(units = 16, input_dim=Xtrain.shape[1], activation='relu'))
+model.add(Dense(units = 32, activation='relu'))
+model.add(Dense(units = 2, activation='softmax'))
+
+# Configure the learning process, which is done via the compile method.
+# The loss function is of type mean_squared_error, and the optimizer is adam.
+#model.compile(loss="binary_crossentropy", metrics = ['binary_accuracy'], optimizer = Adam(learning_rate=0.001), )
+model.compile(loss='binary_crossentropy', metrics = ['acc'], optimizer = Adam(learning_rate=0.001) )
+
+
+# Stop training when a monitored loss has stopped improving.
+# patience=2 indicates that tafter 2 epochs with no improvement the training will be stopped.
+early_stop = EarlyStopping(monitor='loss', patience=5, verbose=1)
+model.summary()
+
+model.fit(Xtrain, ytrain, epochs=10, batch_size=2, verbose=1,callbacks=[early_stop], shuffle=False)
+
+ypred_test =  model.predict(Xtest, verbose=2)
+ypred_test
+
+ypred_test = pd.DataFrame(ypred_test)
+ypred_test.sum()
+
+
+
+
