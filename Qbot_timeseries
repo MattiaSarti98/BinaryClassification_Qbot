@@ -4,7 +4,10 @@ from matplotlib import pyplot as plt
 
 from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
+from sklearn.naive_bayes import GaussianNB
 from sklearn.svm import SVC
+from sklearn.neighbors import KNeighborsClassifier
+
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.metrics import confusion_matrix
@@ -20,10 +23,14 @@ from sklearn.metrics import roc_curve
 from sklearn.metrics import auc
 
 
+
+
+
+#df = pd.read_excel('Qbot_6_timeseries.xlsx')
 df = pd.read_excel('Qbot_5min.xlsx')
+df.head()
 df = df.drop(['bumpc', 'bumpr'], axis=1)
 df.isnull().sum()
-df.head()
 
 #Frequence of the classes
 freq = df['bumpl_norm'].value_counts()
@@ -36,11 +43,8 @@ s
 
 corr_df = pd.DataFrame(s.values, index=s.index , columns = ['Importance'])
 corr_df
-
 s.head(12).plot(kind = 'bar')
-
-
-##UNDERSAMPLING 
+Undesampling
 minclass_len = len(df[df['bumpl_norm']==1]) 
 minclass_len  #len of the df when the Target==1
 
@@ -54,11 +58,9 @@ minclass_ind = df[df['bumpl_norm']==1].index
 indices = np.concatenate([minclass_ind, majclass_rand])  #indices of undersample dataset
 
 undersample = df.loc[indices]
-df = undersample #DATASET
+undersample #DATASET
 sbn.countplot('bumpl_norm', data=df) #now the dataset is balanced
-
-
-##MODELS
+Models
 #Loading the df, without undersampling
 df = pd.read_excel('Qbot_5min.xlsx')
 df = df.drop(['bumpc', 'bumpr'], axis=1)
@@ -66,10 +68,13 @@ df = df.drop(['bumpc', 'bumpr'], axis=1)
 X = df.drop(['bumpl_norm'], axis=1)
 y = df['bumpl_norm']
 df.head()
-
+Score based every time on one feature more, starting from 1 to n features of df
 #WITHOUT UNDERSAMPLING
 from time import process_time
 tstart = process_time()
+
+#X_in = np.zeros((df.shape[0],df.shape[1]-1))
+#X_in = pd.DataFrame(X_in, columns = ['ang_acc', 'gyro','lv_actual', 'lv_comm', 'lwheel', 'lwheel_acc', 'rv_actual', 'rv_comm', 'rwheel', 'rhweel_acc'])
 
 n_feat = df.shape[1]-1 #total number of features
 
@@ -86,7 +91,9 @@ svm_score = []
 
 #The models will be evaluated from 1 to 'n_feat' numbers of features
 for i in range(0, n_feat):
+    #X = X_in + df.iloc[:,:i+1] #inizializzo 'X'
     X = df.iloc[:,:i+1] #inizializzo 'X', non ho bisogno di una matrice vuota da sommare
+
     y = df['bumpl_norm']
     
     X = X.dropna(axis=1) 
@@ -129,8 +136,6 @@ for i in range(0, n_feat):
 tstop = process_time()
 
 print('Elapsed time: ', tstop-tstart, 'seconds')
-
-
 #Plotting the scores
 plt.plot(n_iter, logistic_score)
 plt.plot(n_iter, decisiontree_score)
@@ -138,53 +143,179 @@ plt.plot(n_iter, svm_score)
 plt.legend(['logistic', 'decisiontree', 'svm'])
 plt.xlabel('Number of features')
 plt.ylabel('Accuracy')
-
-
-#MODEL THAT TAKE INTO ACCOUNT THE PREVIOUS FEATURE (t-i) FOR PREDICTING Yt
-
-#retrieve just the most relevant features for this model
 threshold = 0.2
 corr_df = corr_df[corr_df>=threshold] #take the most relevant features (>=0.2) for the model
 corr_df = corr_df.dropna() #because the values of the featrues < 0.2 become 'NaN'
 corr_dfnames = corr_df.index.values.tolist() #array with name of features as elements
 corr_dfnames
-
-
 #Model (Logistic Regression) based on the previous time 
 
-#Voglio vedere se funzionano meglio le feature al tempo t/t-1/t-2/t-3 ecc per predire yt
+#Voglio vedere se funzionano meglio le feature al tempo t o t-1 o t-2 o t-3 ecc per predire yt
 #Dopo voglio mettere insieme le feature al tempo t con le feature al tempo t-i(per predire yt) 
 #(i lo trovo allo step precedente)
 
 
-#Create the features for t-1 and t-2
-df['ang_acc1'] = df.ang_acc.shift(periods=1)
-df['gyro1'] = df.gyro.shift(periods=1)
-df['lwheel1'] = df.lwheel.shift(periods=1)
-df['lwheel_acc1'] = df.lwheel_acc.shift(periods=1)
-df['rwheel1'] = df.rwheel.shift(periods=1)
-df['rwheel_acc1'] = df.rwheel_acc.shift(periods=1)
 
-df['ang_acc2'] = df.ang_acc.shift(periods=2)
-df['gyro2'] = df.gyro.shift(periods=2)
-df['lwheel2'] = df.lwheel.shift(periods=2)
-df['lwheel_acc2'] = df.lwheel_acc.shift(periods=2)
-df['rwheel2'] = df.rwheel.shift(periods=2)
-df['rwheel_acc2'] = df.rwheel_acc.shift(periods=2)
+##Create the features for t-1, t-2 and t-3, first series than transform it in a df
+#For t-1
+lwheel_acc1 = df.lwheel_acc.shift(periods=-1)
+rwheel_acc1 = df.rwheel_acc.shift(periods=-1)
+lv_actual1 = df.lv_actual.shift(periods=-1)
+lwheel1 = df.lwheel.shift(periods=-1)
+rwheel1 = df.rwheel.shift(periods=-1)
 
-df = df.dropna()
+X = pd.concat((lwheel_acc1, rwheel_acc1, lv_actual1, lwheel1, rwheel1), axis=1)
+X = X.dropna() #last row is NaN
+y = df['bumpl_norm']
+y = y.drop([0], axis=0)  #because there are no feature in the first row now
+len(X) == len(y)  #check
+
+#Splitting
+Xtrain, Xtest, ytrain, ytest = train_test_split(X, y, test_size = 0.3, random_state=42)
+
+model_L.fit(Xtrain, ytrain)
+model_L.predict(Xtest)
+score1 = model_L.score(Xtest, ytest)
+#NOT IMPORTANT; ho automatizzato il processo
+ 
+Predicting y(t) considering the X(t-i) features where i goes from 0 to 200 time step previosuly
+ from warnings import simplefilter
+# ignore all future warnings about the knn model
+simplefilter(action='ignore', category=FutureWarning)    #for KNN model, I have a long warning that is not important
+
+#For t that goes from 0 to 200/300 (2/3 seconds in the experiment, since every row is computed every 0.01 s on the simulink model)
+
+#Every loop I will have one less row than before
+#but is ok since the dataset has 30100 rows so I will not lose a significant amount of information at then end
+score_L = []
+score_DT = []
+score_NB = []
+score_KNN = []
+it = []
+
+df = undersample
+
+model_NB = GaussianNB()
+model_KNN = KNeighborsClassifier()
+for i in range(0,300): 
+    X = pd.concat((df.lwheel_acc.shift(periods=-i),
+    df.rwheel_acc.shift(periods=-i),
+    df.lv_actual.shift(periods=-i),
+    df.lwheel.shift(periods=-i),
+    df.rwheel.shift(periods=-i),
+    df.ang_acc.shift(periods=i),
+    df.gyro.shift(periods=i),
+    df.lv_comm.shift(periods=i),
+    df.rv_actual.shift(periods=i),
+    df.rv_comm.shift(periods=i)), axis=1)
+    #X = X.dropna() #last row is NaN
+    
+    it.append(i)
+    
+    y = df['bumpl_norm']
+    #y = y.drop(it, axis=0)  #because there are no feature in the first row now
+    #print(y)
+    df_new = pd.concat([X, y], axis=1, ignore_index=True).dropna()
+    X = df_new.iloc[:,0:-1]
+    y = df_new.iloc[:,-1]
+    
+    #Splitting
+    Xtrain, Xtest, ytrain, ytest = train_test_split(X, y, test_size = 0.3, random_state=42)
+
+    model_L.fit(Xtrain, ytrain)
+    model_DT.fit(Xtrain, ytrain)
+    model_NB.fit(Xtrain, ytrain)
+    model_KNN.fit(Xtrain, ytrain)
+    
+    score_L.append(model_L.score(Xtest, ytest))
+    score_DT.append(model_DT.score(Xtest, ytest))
+    score_NB.append(model_NB.score(Xtest, ytest))
+    score_KNN.append(model_KNN.score(Xtest, ytest))
+    
+#print('Score Logistic regression: \n', np.round(score_L, decimals=4))
+#print('Score Decision Tree: \n',  np.round(score_DT, decimals=4))
+#print('Score Naive Bayes: \n',  np.round(score_NB, decimals=4))
+print('The best and the worst features from 0 to 200 time step before: ')
+print('\nThe best features for the logistic regression are referred to: ', score_L.index(max(score_L)), 'previous step')
+print('The worst features for the logistic regression are referred to: ', score_L.index(min(score_L)), 'previous step')
+
+print('The best features for the decision tree are referred to: ', score_DT.index(max(score_DT)), 'previous step')
+print('The worst features for the decision tree are referred to: ', score_DT.index(min(score_DT)), 'previous step')
+#Transform the scores in one df
+score_L = pd.DataFrame(score_L, columns=['score_L'] )
+score_DT = pd.DataFrame(score_DT, columns=['score_DT'] )
+score_NB = pd.DataFrame(score_NB, columns=['score_NB'] )
+score_KNN = pd.DataFrame(score_KNN, columns=['score_KNN'] )
+
+df_score = pd.concat([score_L, score_DT, score_NB, score_KNN], axis=1)
+df_score['Mean total score'] = df_score.sum(axis=1) / df_score.shape[1]  #new col for computing an aggregate perfomance of the all models 
+df_score
+#Find the bests features relative and add one column to the df
+indecesmax = df_score.idxmax()  #return the index of the max for every column
+indecesmin = df_score.idxmin()  #return the index of the min for every column
+df_score['Mean total score'] = df_score.sum(axis=1) / df_score.shape[1]
+
+a = indecesmax.values  
+a = np.array(a)  #transform in an array for plotting it later
+
+b = indecesmin.values
+b = np.array(b)
+
+score_L = np.array(score_L)
+score_DT = np.array(score_DT)
+score_NB = np.array(score_NB)
+score_KNN = np.array(score_KNN)
+
+print(indecesmin)  #previous time-step regarding the best features 
+print(indecesmax)  #previous time-step regarding the worst features
+plt.plot(it, score_L)
+plt.plot(it, score_DT)
+plt.plot(it, score_NB)
+plt.plot(it, score_KNN)
+#sbn.regplot(x=it, y=score_L, logistic=True)   regr lineare, diventa un po meno leggibile se la faccio per ognugo
+
+#Best features indicated with a '*'
+plt.scatter(a[0], score_L[a[0]], marker='*', linewidths=3)
+plt.scatter(a[1], score_DT[a[1]], marker='*', linewidths=3)
+plt.scatter(a[2], score_NB[a[2]], marker='*', linewidths=3)
+plt.scatter(a[3], score_KNN[a[3]], marker='*', linewidths=3)
 
 
+#Worst features indicated with a yellow '*'
+plt.scatter(b[0], score_L[b[0]], marker='x', linewidths=2.5, c='yellow' )
+plt.scatter(b[1], score_DT[b[1]], marker='x',  linewidths=2.5 , c='yellow'  )
+plt.scatter(b[2], score_NB[b[2]], marker='x',  linewidths=2.5 , c='yellow' )
+plt.scatter(b[3], score_KNN[b[3]], marker='x', linewidths=2.5 , c='yellow'   )
 
 
-#ANN (stesso dell'altro file, fin ora 15/04)
+plt.xlabel('Previous time step features considered')
+plt.ylabel('Accuracy')
+plt.legend(['Logistic regr', 'Decision tree', 'Naive Bayes', 'KNN'])
+KNN and DECISION TREE are the two most model with an high accuracy and they have the worst features (to predict the variable at time t) at t-196 and t-193, retrieve the numbers from the variable 'indecesmin'. They have the best features (to predict the variable at time t) at time t-13 and t-15, retrieve it from the variable 'indecesmax'. Regarding the NAIVE BAYES and LOGISTIC REGRESSION model they do not have an high accuracy as the precedent models, and they have the best and the worst features
+#Plotting linear and polynomial regression of the scores
+sbn.regplot(x=it, y=df_score['Mean total score'].values, logistic=True, color='yellow') #lin regression
+
+
+z = np.poly1d(np.polyfit(it, df_score['Mean total score'].to_list(), 4))  #pol regression
+plt.scatter(it, df_score['Mean total score'].to_list())
+plt.plot(it, z(it), c='red')
+
+
+plt.xlabel('Previous time step features considered')
+plt.ylabel('Mean Accuracy of the all models')
+ 
+#score_L = score_L.values.tolist()
+#score_DT = score_DT.values.tolist()
+#score_NB = score_NB.values.tolist()
+#score_KNN = score_KNN.values.tolist()
+ 
+ANN
 from keras.models import Sequential
 from keras.optimizers import Adam
 from keras.metrics import Recall
 from keras.metrics import BinaryAccuracy
 from keras.layers import Dense
 from keras.callbacks import EarlyStopping
-
 df = pd.read_excel('Qbot_5min.xlsx')
 df = df.drop(['bumpc', 'bumpr'], axis=1)
 
@@ -210,14 +341,15 @@ model.compile(loss='binary_crossentropy', metrics = ['acc'], optimizer = Adam(le
 # patience=2 indicates that tafter 2 epochs with no improvement the training will be stopped.
 early_stop = EarlyStopping(monitor='loss', patience=5, verbose=1)
 model.summary()
-
+ 
+ 
 model.fit(Xtrain, ytrain, epochs=10, batch_size=2, verbose=1,callbacks=[early_stop], shuffle=False)
-
 ypred_test =  model.predict(Xtest, verbose=2)
 ypred_test
-
+#ypred_test = np.argmax(ypred_test)
 ypred_test = pd.DataFrame(ypred_test)
 ypred_test.sum()
+ytrain.count()
 
 
 
