@@ -59,7 +59,7 @@ indices = np.concatenate([minclass_ind, majclass_rand])  #indices of undersample
 
 undersample = df.loc[indices]
 undersample #DATASET
-sbn.countplot('bumpl_norm', data=df) #now the dataset is balanced
+sbn.countplot('bumpl_norm', data=undersample) #now the dataset is balanced
 Models
 #Loading the df, without undersampling
 df = pd.read_excel('Qbot_5min.xlsx')
